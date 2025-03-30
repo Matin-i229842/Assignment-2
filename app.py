@@ -26,21 +26,43 @@ purchase_prices = [float(p.strip()) for p in purchase_prices.split(",")]
 start_date = st.sidebar.date_input("Select start date for performance analysis", pd.to_datetime("2023-01-01"))
 end_date = st.sidebar.date_input("Select end date", pd.to_datetime("today"))
 
-# Fetch stock data
+# Fetch stock data with error handling
 @st.cache_data
 def get_stock_data(tickers, start_date, end_date):
-    data = yf.download(tickers, start=start_date, end=end_date)['Adj Close']
-    return data
+    try:
+        data = yf.download(tickers, start=start_date, end=end_date)
+        
+        # Handle multiple vs single tickers
+        if len(tickers) > 1:
+            if "Adj Close" in data.columns:
+                return data["Adj Close"]
+            else:
+                st.error("❌ 'Adj Close' column not found. Check stock symbols and date range.")
+                return None
+        else:
+            return data[["Adj Close"]] if "Adj Close" in data.columns else None
+    except Exception as e:
+        st.error(f"❌ Failed to fetch stock data: {str(e)}")
+        return None
 
+# Fetch stock data
 stock_data = get_stock_data(tickers, start_date, end_date)
+
+# Stop execution if no data is found
+if stock_data is None or stock_data.empty:
+    st.error("⚠️ No data found. Please check your stock symbols and date range.")
+    st.stop()
 
 # Portfolio Analysis
 portfolio = pd.DataFrame({
     "Ticker": tickers,
     "Shares": num_shares,
     "Purchase Price": purchase_prices,
-    "Current Price": [stock_data[t][-1] for t in tickers],
+    "Current Price": [stock_data[t][-1] if t in stock_data.columns else np.nan for t in tickers],
 })
+
+# Drop tickers with missing price data
+portfolio.dropna(inplace=True)
 
 portfolio["Investment"] = portfolio["Shares"] * portfolio["Purchase Price"]
 portfolio["Current Value"] = portfolio["Shares"] * portfolio["Current Price"]
