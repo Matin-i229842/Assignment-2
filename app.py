@@ -26,23 +26,29 @@ purchase_prices = [float(p.strip()) for p in purchase_prices.split(",")]
 start_date = st.sidebar.date_input("Select start date for performance analysis", pd.to_datetime("2023-01-01"))
 end_date = st.sidebar.date_input("Select end date", pd.to_datetime("today"))
 
-# Fetch stock data with error handling
+# Fetch stock data with improved error handling
 @st.cache_data
 def get_stock_data(tickers, start_date, end_date):
     try:
         data = yf.download(tickers, start=start_date, end=end_date)
-        
-        # Handle multiple vs single tickers
+
+        # Check if data is empty
+        if data.empty:
+            st.error("⚠️ No stock data found. Check stock symbols and date range.")
+            return None
+
+        # Adjust handling for single vs. multiple tickers
         if len(tickers) > 1:
             if "Adj Close" in data.columns:
                 return data["Adj Close"]
             else:
-                st.error("❌ 'Adj Close' column not found. Check stock symbols and date range.")
+                st.error("❌ 'Adj Close' column missing. Try different stock symbols.")
                 return None
         else:
             return data[["Adj Close"]] if "Adj Close" in data.columns else None
+
     except Exception as e:
-        st.error(f"❌ Failed to fetch stock data: {str(e)}")
+        st.error(f"❌ Error fetching stock data: {str(e)}")
         return None
 
 # Fetch stock data
@@ -50,7 +56,7 @@ stock_data = get_stock_data(tickers, start_date, end_date)
 
 # Stop execution if no data is found
 if stock_data is None or stock_data.empty:
-    st.error("⚠️ No data found. Please check your stock symbols and date range.")
+    st.error("⚠️ No valid stock data available. Please check your stock symbols and date range.")
     st.stop()
 
 # Portfolio Analysis
