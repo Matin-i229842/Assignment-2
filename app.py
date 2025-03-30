@@ -1,82 +1,54 @@
 import streamlit as st
-import requests
-import random
-import matplotlib.pyplot as plt
+import pandas as pd
+import plotly.express as px
 
-# Function to fetch quiz questions from the web
-def fetch_questions():
-    url = "https://opentdb.com/api.php?amount=5&category=17&type=multiple"  # Fetch 5 questions
-    response = requests.get(url)
+# Define tax brackets (Example for a progressive tax system)
+def calculate_tax(income, deductions, tax_credits, filing_status):
+    tax_brackets = {
+        "single": [(10000, 0.1), (30000, 0.15), (70000, 0.2), (float('inf'), 0.25)],
+        "married": [(20000, 0.1), (60000, 0.15), (120000, 0.2), (float('inf'), 0.25)]
+    }
+    
+    taxable_income = max(0, income - deductions)
+    tax_due = 0
+    prev_limit = 0
+    
+    for bracket in tax_brackets[filing_status]:
+        limit, rate = bracket
+        if taxable_income > prev_limit:
+            taxable_amount = min(taxable_income, limit) - prev_limit
+            tax_due += taxable_amount * rate
+            prev_limit = limit
+    
+    tax_due = max(0, tax_due - tax_credits)
+    return taxable_income, tax_due
 
-    if response.status_code == 200:
-        data = response.json()
-        questions = []
-        for item in data["results"]:
-            question = {
-                "question": item["question"],
-                "options": item["incorrect_answers"] + [item["correct_answer"]],
-                "answer": item["correct_answer"]
-            }
-            random.shuffle(question["options"])  # Shuffle answer options
-            questions.append(question)
-        return questions
-    else:
-        st.error("⚠️ Failed to fetch questions from the web.")
-        return []
+# Streamlit UI
+st.title("🏦 Tax Estimator App")
+st.sidebar.header("User Input")
 
-# Quiz App Function
-def quiz_app():
-    st.title("🧠 Personal Finance Quiz")
-    st.write("Test your financial literacy with this interactive quiz!")
+# User Inputs
+income = st.sidebar.number_input("Enter Your Yearly Income ($):", min_value=0, value=50000, step=1000)
+deductions = st.sidebar.number_input("Enter Total Deductions ($):", min_value=0, value=5000, step=500)
+tax_credits = st.sidebar.number_input("Enter Tax Credits ($):", min_value=0, value=1000, step=100)
+filing_status = st.sidebar.selectbox("Select Your Filing Status:", ["single", "married"])
 
-    # Load questions dynamically
-    if "questions" not in st.session_state:
-        st.session_state.questions = fetch_questions()
-        st.session_state.score = 0
-        st.session_state.current_question = 0
-        st.session_state.answers = []
+if st.sidebar.button("Calculate Tax"):
+    taxable_income, tax_due = calculate_tax(income, deductions, tax_credits, filing_status)
+    st.subheader("💰 Tax Summary")
+    st.write(f"**Taxable Income:** ${taxable_income:,.2f}")
+    st.write(f"**Estimated Tax Due:** ${tax_due:,.2f}")
+    
+    # Visualization
+    tax_data = pd.DataFrame({"Category": ["Income After Tax", "Tax Paid"], "Amount": [income - tax_due, tax_due]})
+    fig = px.pie(tax_data, values="Amount", names="Category", title="Tax Breakdown", hole=0.3)
+    st.plotly_chart(fig)
 
-    # Get current question
-    if st.session_state.current_question < len(st.session_state.questions):
-        q = st.session_state.questions[st.session_state.current_question]
-        st.subheader(f"Q{st.session_state.current_question + 1}: {q['question']}")
+    bar_data = pd.DataFrame({"Category": ["Total Income", "Taxable Income", "Tax Due"], "Amount": [income, taxable_income, tax_due]})
+    fig2 = px.bar(bar_data, x="Category", y="Amount", title="Income vs. Tax Due", text_auto=True)
+    st.plotly_chart(fig2)
 
-        # Display options
-        user_choice = st.radio("Select your answer:", q["options"])
+# Footer
+st.write("\n\n Developed for AF3005 – Programming for Finance | Instructor: Dr. Usama Arshad")
 
-        # Submit button
-        if st.button("Submit Answer"):
-            st.session_state.answers.append(user_choice)
-            if user_choice == q["answer"]:
-                st.session_state.score += 1
-                st.success("✅ Correct!")
-            else:
-                st.error(f"❌ Incorrect! The correct answer is: {q['answer']}")
-
-            st.session_state.current_question += 1
-
-    # Show final score
-    else:
-        st.subheader("Quiz Completed! 🎉")
-        st.write(f"Your Final Score: **{st.session_state.score} / {len(st.session_state.questions)}**")
-        st.pyplot(plot_score(st.session_state.score, len(st.session_state.questions)))
-
-        # Reset Button
-        if st.button("Restart Quiz"):
-            st.session_state.questions = fetch_questions()
-            st.session_state.score = 0
-            st.session_state.current_question = 0
-            st.session_state.answers = []
-
-# Score Visualization
-def plot_score(score, total):
-    fig, ax = plt.subplots()
-    ax.bar(["Correct", "Incorrect"], [score, total - score], color=["green", "red"])
-    ax.set_ylabel("Number of Questions")
-    ax.set_title("Quiz Performance")
-    return fig
-
-# Run App
-if __name__ == "__main__":
-    quiz_app()
 
